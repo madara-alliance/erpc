@@ -22,7 +22,7 @@ RUN go mod download
 # Copy the source code
 COPY . .
 COPY --from=runtime-base /etc/ssl/certs/ca-certificates.crt /build/ca-certificates.crt
-RUN go run ./tools/ca-bundle-filter /build/ca-certificates.crt /build/ca-certificates-filtered.crt
+RUN go run ./tools/ca-bundle-filter < /build/ca-certificates.crt > /build/ca-certificates-filtered.crt
 
 # Set build arguments
 ARG VERSION

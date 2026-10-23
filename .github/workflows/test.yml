@@ -6,9 +6,9 @@ concurrency:
 
 on:
   push:
-    branches: [main]
+    branches: [main, release/0.1.1]
   pull_request:
-    branches: [main]
+    branches: [main, release/0.1.1]
 
 permissions:
   contents: read
@@ -29,7 +29,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          go-version: '1.25.x'
+          go-version: '1.26.10'
       - name: Install dependencies
         run: make setup
       - name: Build
@@ -52,7 +52,9 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          go-version: '1.25.x'
+          go-version: '1.26.10'
+      - name: Check reachable Go vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
       - name: Run Gosec Security Scanner
         uses: securego/gosec@f1c81de5fcdf7b466b229fb24ca02d1a8406dd09 # master
         with:

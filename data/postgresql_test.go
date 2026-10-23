@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/erpc/erpc/common"
-	"github.com/jackc/pgconn"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -372,8 +372,6 @@ func TestPostgreSQLIAMAuthValidation(t *testing.T) {
 		require.NoError(t, base().Validate())
 	})
 
-
-
 	t.Run("missing endpoint", func(t *testing.T) {
 		cfg := base()
 		cfg.IAMAuth.Endpoint = ""
@@ -422,4 +420,3 @@ func TestPostgreSQLIAMAuthValidation(t *testing.T) {
 		require.ErrorContains(t, cfg.Validate(), "auth.mode")
 	})
 }
-

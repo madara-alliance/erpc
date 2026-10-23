@@ -1,0 +1,52 @@
+name: fork image
+
+on:
+  pull_request:
+    branches: [release/0.1.1]
+  push:
+    branches: [release/0.1.1]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        if: github.event_name == 'pull_request'
+        with:
+          go-version: '1.26.10'
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Log in to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish on release branch
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          platforms: linux/amd64
+          load: ${{ github.event_name == 'pull_request' }}
+          push: ${{ github.event_name == 'push' }}
+          tags: ghcr.io/madara-alliance/erpc:0.1.1-madara-${{ github.sha }}
+          build-args: |
+            VERSION=0.1.1-madara
+            COMMIT_SHA=${{ github.sha }}
+      - name: Smoke test image
+        if: github.event_name == 'pull_request'
+        run: |
+          image=ghcr.io/madara-alliance/erpc:0.1.1-madara-${{ github.sha }}
+          docker run --rm --entrypoint /erpc-server "$image" --version
+          container=$(docker create "$image")
+          docker cp "$container:/etc/ssl/certs/ca-certificates.crt" /tmp/image-ca.crt
+          docker cp "$container:/erpc-server" /tmp/erpc-server
+          docker rm "$container"
+          go version -m /tmp/erpc-server | grep 'go1.26.10'
+          test "$(go run ./tools/ca-bundle-filter /tmp/image-ca.crt /tmp/checked-ca.crt)" = 'removed 0 distrusted roots'

@@ -46,6 +46,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: ca-bundle-filter INPUT OUTPUT")
 		os.Exit(2)
 	}
+	// #nosec G703 -- This build-time CLI deliberately reads the operator-supplied input path.
 	input, err := os.ReadFile(os.Args[1])
 	if err != nil {
 		panic(err)
@@ -54,6 +55,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	// #nosec G703 G306 -- The output path is operator-supplied and the CA bundle must be readable by the nonroot runtime.
 	if err := os.WriteFile(os.Args[2], output, 0644); err != nil {
 		panic(err)
 	}

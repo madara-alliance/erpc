@@ -5,6 +5,7 @@ on:
     branches: [release/0.1.1]
   push:
     branches: [release/0.1.1]
+    tags: [v0.1.1-madara.*]
 
 permissions:
   contents: read
@@ -35,7 +36,7 @@ jobs:
           platforms: linux/amd64
           load: ${{ github.event_name == 'pull_request' }}
           push: ${{ github.event_name == 'push' }}
-          tags: ghcr.io/madara-alliance/erpc:0.1.1-madara-${{ github.sha }}
+          tags: ghcr.io/madara-alliance/erpc:${{ github.ref_type == 'tag' && github.ref_name || format('0.1.1-madara-{0}', github.sha) }}
           build-args: |
             VERSION=0.1.1-madara
             COMMIT_SHA=${{ github.sha }}

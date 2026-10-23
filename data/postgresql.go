@@ -17,9 +17,9 @@ import (
 
 	"github.com/erpc/erpc/common"
 	"github.com/erpc/erpc/util"
-	"github.com/jackc/pgconn"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -152,12 +152,25 @@ func NewPostgreSQLConnector(
 	return connector, nil
 }
 
+// pgx/v5 creates pools lazily; keep the connection check from pgx/v4's ConnectConfig.
+func connectPool(ctx context.Context, config *pgxpool.Config) (*pgxpool.Pool, error) {
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		return nil, err
+	}
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, err
+	}
+	return pool, nil
+}
+
 // connectTask establishes (or re-establishes) the pgxpool used by this
 // connector. It is invoked once by the initial bootstrap call and again by
 // the util.Initializer auto-retry loop whenever handleConnectionFailure
 // marks the task as failed.
 //
-// All the slow work below — pgxpool.ConnectConfig (TCP dial, TLS, auth,
+// All the slow work below — connectPool (TCP dial, TLS, auth,
 // opening MinConns connections) and the one-time schema setup — runs WITHOUT
 // the connMu write lock. The previous design held connMu.Lock() for the
 // entire ~5s body of this function, which serialized every Get/Set/Lock
@@ -202,7 +215,7 @@ func (p *PostgreSQLConnector) connectTask(ctx context.Context, cfg *common.Postg
 	connectCtx, cancel := context.WithTimeout(ctx, p.initTimeout)
 	defer cancel()
 
-	newConn, err := pgxpool.ConnectConfig(connectCtx, config)
+	newConn, err := connectPool(connectCtx, config)
 	if err != nil {
 		return err
 	}
@@ -919,9 +932,9 @@ func (p *PostgreSQLConnector) connectListener(ctx context.Context, channel strin
 		p.logger.Trace().Str("channel", channel).Msg("attempting to connect to postgres channel")
 
 		// Snapshot the current pool state under RLock so we don't hold the
-		// WRITE lock across the slow pgxpool.ConnectConfig dial below. The
+		// WRITE lock across the slow connectPool dial below. The
 		// previous design held connMu.Lock() for the entire body of this
-		// function — including ConnectConfig and Acquire — which
+		// function — including connection setup and Acquire — which
 		// serialized every Get/Set/Lock behind any listener that needed to
 		// build a new pool. This is the same anti-pattern that connectTask
 		// used to have (see the long comment there for incident context).
@@ -942,7 +955,7 @@ func (p *PostgreSQLConnector) connectListener(ctx context.Context, channel strin
 			lcfg.MaxConns = p.maxConns
 			// Build the new listener pool OUTSIDE any lock — this is the
 			// slow operation (TCP dial + TLS + auth + MinConns conns).
-			newPool, err := pgxpool.ConnectConfig(ctx, lcfg)
+			newPool, err := connectPool(ctx, lcfg)
 			if err != nil {
 				time.Sleep(5 * time.Second)
 				continue

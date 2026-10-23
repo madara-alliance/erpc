@@ -8,8 +8,10 @@
 #     - ts-prod -> Install prod dependencies only
 #     - final -> Final stage where we copy the Go binary and the TS files
 
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab AS runtime-base
+
 # Build stage for Go
-FROM golang:1.26-alpine@sha256:0178a641fbb4858c5f1b48e34bdaabe0350a330a1b1149aabd498d0699ff5fb2 AS go-builder
+FROM golang:1.26.10-alpine@sha256:27f2d3b83cfc5803c8078f8e730af0f7c431bf067afaec8f60a36fb763187cba AS go-builder
 
 WORKDIR /build
 
@@ -19,6 +21,8 @@ RUN go mod download
 
 # Copy the source code
 COPY . .
+COPY --from=runtime-base /etc/ssl/certs/ca-certificates.crt /build/ca-certificates.crt
+RUN go run ./tools/ca-bundle-filter /build/ca-certificates.crt /build/ca-certificates-filtered.crt
 
 # Set build arguments
 ARG VERSION
@@ -34,10 +38,7 @@ RUN go build -v -ldflags="$LDFLAGS" -a -installsuffix cgo -o erpc-server ./cmd/e
     go build -v -ldflags="$LDFLAGS" -a -installsuffix cgo -tags pprof -o erpc-server-pprof ./cmd/erpc/*.go
 
 # Global typescript related image
-FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS ts-core
-# Pin to package.json `packageManager`: an unpinned install pulls the newest
-# pnpm, which re-execs itself to the pinned version and fails on alpine with
-# ERR_PNPM_PNPM_ENGINE_NO_NATIVE_BINARY (main release builds, 2026-09-29/30).
+FROM node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS ts-core
 RUN npm install -g pnpm@10.28.2
 
 # Stage where we will install dev dependencies + compile sdk
@@ -65,15 +66,17 @@ COPY package.json /temp/prod/package.json
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store cd /temp/prod && pnpm install --prod --frozen-lockfile
 
 # Create symlink stage (for backwards compatibility with earlier image file structure)
-FROM alpine:latest@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS symlink
+FROM alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a AS symlink
 RUN mkdir -p /root && ln -s /erpc-server /root/erpc-server
 
 # Final stage
-FROM gcr.io/distroless/static-debian12:nonroot@sha256:f5b485ea962d9bd1186b2f6b3a061191539b905b82ec395de78cbfae51f20e35 AS final
+FROM runtime-base AS final
 
 # Copy Go binaries from go-builder
 COPY --from=go-builder /build/erpc-server /
 COPY --from=go-builder /build/erpc-server-pprof /
+COPY --from=go-builder /build/ca-certificates-filtered.crt /etc/ssl/certs/ca-certificates.crt
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 
 # Copy symlinked directory with preserved symlinks
 COPY --from=symlink --link /root /root

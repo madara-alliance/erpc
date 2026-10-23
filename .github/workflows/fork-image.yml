@@ -49,4 +49,5 @@ jobs:
           docker cp "$container:/erpc-server" /tmp/erpc-server
           docker rm "$container"
           go version -m /tmp/erpc-server | grep 'go1.26.10'
-          test "$(go run ./tools/ca-bundle-filter /tmp/image-ca.crt /tmp/checked-ca.crt)" = 'removed 0 distrusted roots'
+          go run ./tools/ca-bundle-filter < /tmp/image-ca.crt > /tmp/checked-ca.crt 2> /tmp/ca-filter.log
+          grep -Fx 'removed 0 distrusted roots' /tmp/ca-filter.log

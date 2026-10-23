@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"os"
 )
 
@@ -42,11 +43,11 @@ func filterBundle(data []byte, blocked map[string]bool) ([]byte, int, error) {
 }
 
 func main() {
-	if len(os.Args) != 3 {
-		fmt.Fprintln(os.Stderr, "usage: ca-bundle-filter INPUT OUTPUT")
+	if len(os.Args) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: ca-bundle-filter < INPUT > OUTPUT")
 		os.Exit(2)
 	}
-	input, err := os.ReadFile(os.Args[1])
+	input, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		panic(err)
 	}
@@ -54,8 +55,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	if err := os.WriteFile(os.Args[2], output, 0644); err != nil {
+	if _, err := os.Stdout.Write(output); err != nil {
 		panic(err)
 	}
-	fmt.Printf("removed %d distrusted roots\n", removed)
+	fmt.Fprintf(os.Stderr, "removed %d distrusted roots\n", removed)
 }

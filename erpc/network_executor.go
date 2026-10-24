@@ -222,6 +222,14 @@ func (e *networkExecutor) Run(
 			defer cancel()
 		}
 	}
+	// A native filter call must use one upstream attempt. An uncertain poll
+	// cannot be retried or hedged: the first attempt may have consumed logs.
+	if method, _ := req.Method(); evm.IsStatefulFilterMethod(method) {
+		if state := req.ExecState(); state != nil {
+			state.NetworkAttempts.Add(1)
+		}
+		return tryOneUpstream(ctx, req)
+	}
 
 	// Consensus branch: each slot is retry(hedge(tryOneUpstream)).
 	// Skipped when the request carries the SkipConsensus directive (header

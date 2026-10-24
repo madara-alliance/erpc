@@ -138,6 +138,7 @@ export type {
   DirectiveDefaultsConfig,
   // DB related
   DatabaseConfig,
+  MongoLogFilterConfig,
   CacheConfig,
   DataFinalityState,
   CacheEmptyBehavior,

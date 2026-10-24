@@ -242,6 +242,11 @@ func (e *upstreamExecutor) shouldRetry(req *common.NormalizedRequest, _ *common.
 	if err == nil {
 		return false
 	}
+	if req != nil {
+		if method, _ := req.Method(); evm.IsStatefulFilterMethod(method) {
+			return false
+		}
+	}
 	if req != nil && req.IsCompositeRequest() {
 		return false
 	}
@@ -288,12 +293,12 @@ func (e *upstreamExecutor) runHedge(
 		return e.callBreakerWithTimeout(ctx, req, inner, false)
 	}
 
-	// Hedge is not used for composite or write-only requests.
+	// Hedge is not used for composite, write, or native filter requests.
 	if req != nil {
 		if req.IsCompositeRequest() {
 			return e.callBreakerWithTimeout(ctx, req, inner, false)
 		}
-		if m, _ := req.Method(); m != "" && (evm.IsNonRetryableWriteMethod(m) || svm.IsNonRetryableWriteMethod(m)) {
+		if m, _ := req.Method(); m != "" && (evm.IsStatefulFilterMethod(m) || evm.IsNonRetryableWriteMethod(m) || svm.IsNonRetryableWriteMethod(m)) {
 			return e.callBreakerWithTimeout(ctx, req, inner, false)
 		}
 	}

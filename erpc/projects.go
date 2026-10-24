@@ -11,6 +11,7 @@ import (
 	"github.com/erpc/erpc/architecture/evm/integrity"
 	"github.com/erpc/erpc/auth"
 	"github.com/erpc/erpc/common"
+	"github.com/erpc/erpc/data"
 	"github.com/erpc/erpc/internal/policy"
 	"github.com/erpc/erpc/telemetry"
 	"github.com/erpc/erpc/upstream"
@@ -29,6 +30,7 @@ type PreparedProject struct {
 	networksRegistry            *NetworksRegistry
 	consumerAuthRegistry        *auth.AuthRegistry
 	rateLimitersRegistry        *upstream.RateLimitersRegistry
+	logFilterStore              data.LogFilterStore
 	upstreamsRegistry           *upstream.UpstreamsRegistry
 	policyEngine                *policy.Engine
 	allowClientDirectiveMatcher common.MatcherFunc

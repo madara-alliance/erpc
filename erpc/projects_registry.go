@@ -56,6 +56,7 @@ type ProjectsRegistry struct {
 
 	rateLimitersRegistry *upstream.RateLimitersRegistry
 	sharedState          data.SharedStateRegistry
+	logFilterStore       data.LogFilterStore
 	evmJsonRpcCache      *evm.EvmJsonRpcCache
 	svmJsonRpcCache      *svm.SvmJsonRpcCache
 	preparedProjects     map[string]*PreparedProject
@@ -160,6 +161,7 @@ func (r *ProjectsRegistry) RegisterProject(prjCfg *common.ProjectConfig) (*Prepa
 		Config:               prjCfg,
 		Logger:               &lg,
 		rateLimitersRegistry: r.rateLimitersRegistry,
+		logFilterStore:       r.logFilterStore,
 		cfgMu:                sync.RWMutex{},
 	}
 	upstreamsRegistry := upstream.NewUpstreamsRegistry(

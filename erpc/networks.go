@@ -42,6 +42,7 @@ type Network struct {
 	failsafeExecutors    []*networkExecutor // main: failsafe rename FailsafeExecutor → networkExecutor
 	rateLimitersRegistry *upstream.RateLimitersRegistry
 	cacheDal             common.CacheDAL
+	logFilterStore       data.LogFilterStore
 	metricsTracker       *health.Tracker
 	upstreamsRegistry    *upstream.UpstreamsRegistry
 	// policyEngine replaces the legacy `selectionPolicyEvaluator *PolicyEvaluator` field
@@ -1678,6 +1679,9 @@ func (n *Network) Forward(ctx context.Context, req *common.NormalizedRequest) (*
 		)
 	}
 	defer forwardSpan.End()
+	if n.logFilterStore != nil && n.cfg.Architecture == common.ArchitectureEvm && !bypassSharedLogFilter(ctx) && evm.IsStatefulFilterMethod(method) {
+		return n.forwardSharedLogFilter(ctx, req, method)
+	}
 
 	if lg.GetLevel() == zerolog.TraceLevel {
 		lg.Debug().Object("request", req).Msgf("forwarding request for network")
@@ -2269,7 +2273,8 @@ func (n *Network) Forward(ctx context.Context, req *common.NormalizedRequest) (*
 			// a usable result, sweep the untried fallback tier once per
 			// request. Errors non-retryable toward the network do not
 			// escalate, and consensus keeps its fixed participant set.
-			if (bestResp == nil || (isEmptyNetworkResult(method, bestResp) && emptyIsMiss(execSpanCtx))) &&
+			if !evm.IsStatefulFilterMethod(method) &&
+				(bestResp == nil || (isEmptyNetworkResult(method, bestResp) && emptyIsMiss(execSpanCtx))) &&
 				lastErr != nil && common.IsRetryableTowardNetwork(lastErr) &&
 				n.cfg.Failover.Enabled() && !failsafeExecutor.HasConsensus() {
 				// A use-upstream pin narrows the escape exactly as it narrows
@@ -3129,9 +3134,9 @@ func (n *Network) handleMultiplexing(ctx context.Context, lg *zerolog.Logger, re
 		return nil, nil, nil
 	}
 
-	// A non-retryable write (e.g. creating a filter) must reach an upstream
-	// once per call, so it is never shared with a concurrent identical call.
-	if method, _ := req.Method(); evm.IsNonRetryableWriteMethod(method) || svm.IsNonRetryableWriteMethod(method) {
+	// Non-retryable writes and native filter calls must not share a response
+	// with another request; a filter poll can consume upstream state.
+	if method, _ := req.Method(); evm.IsStatefulFilterMethod(method) || evm.IsNonRetryableWriteMethod(method) || svm.IsNonRetryableWriteMethod(method) {
 		return nil, nil, nil
 	}
 

@@ -1,0 +1,88 @@
+---
+title: Shared log filters
+description: Keep native EVM log-filter bindings across eRPC pods with a MongoDB registry.
+---
+
+import { LLMsTxtLink, AISection, ConfigTabs, SourceLink, PromptExample } from "../../../components";
+
+<LLMsTxtLink />
+
+# Shared log filters
+
+When this opt-in feature is enabled, eRPC returns its own ID for `eth_newFilter` and stores the upstream's native ID in MongoDB. Any eRPC pod can resolve that ID and send `eth_getFilterChanges`, `eth_getFilterLogs`, or `eth_uninstallFilter` to the same upstream. Calls for one filter are serialized across pods. If the store or binding is unavailable, the call fails.
+
+The upstream still owns the native filter. If it expires or disappears, the client must recreate the filter and backfill from its durable block cursor. A timed-out consuming poll is marked uncertain and subsequent polls fail until recovery; the standard Ethereum filter API does not acknowledge client receipt. This feature does not claim lossless provider failover.
+
+## Quick taste
+
+Set the same MongoDB URI environment variable on every pod, then opt in on the EVM network:
+
+<ConfigTabs
+  path="database.logFilters"
+  yaml={`database:
+  logFilters:
+    uriEnv: ERPC_FILTER_MONGODB_URI
+    database: erpc
+    collection: erpc_log_filters
+    ttl: 24h
+projects:
+  - id: main
+    networks:
+      - architecture: evm
+        evm:
+          chainId: 1
+          sharedLogFilters: true`}
+  ts={`database: {
+  logFilters: {
+    uriEnv: "ERPC_FILTER_MONGODB_URI",
+    database: "erpc",
+    collection: "erpc_log_filters",
+    ttl: "24h",
+  },
+},
+projects: [{
+  id: "main",
+  networks: [{ architecture: "evm", evm: { chainId: 1, sharedLogFilters: true } }],
+}]`}
+/>
+
+<PromptExample
+  n={1}
+  title="share log filters across pods"
+  defaultOpen
+  prompt={`Configure my EVM network to keep native log-filter bindings in MongoDB across eRPC pods. Use an environment variable for the connection URI, and explain what happens when MongoDB or the upstream filter is lost. Read https://docs.erpc.cloud/config/database/log-filters.llms.txt first.`}
+/>
+
+<AISection title="Shared log filters — full agent reference">
+
+### How it works
+
+`eth_newFilter` uses ordinary upstream selection once. eRPC writes a MongoDB record containing a random public ID, project/network/caller scope, selected upstream ID, native ID, original criteria, generation, lease, and expiry before returning the public ID. A 224-bit random ID follows the `0x65727063` marker; other filter IDs retain the old routing path so block and pending filters are unaffected.
+
+Each operation on a public ID atomically acquires the MongoDB record with `FindOneAndUpdate`. The lease advances the generation, and release/delete is conditional on that generation and lease token. A 15-second upstream call cap sits below the 45-second lease. The TTL index eventually removes abandoned records; requests check expiry immediately rather than waiting for the TTL monitor. MongoDB majority read/write concerns and a startup ping/index check make store failure explicit.
+
+### Config schema
+
+| Field | Type | Default | Meaning |
+|---|---|---|---|
+| `database.logFilters` | `*MongoLogFilterConfig` | `nil` | Optional MongoDB registry. Source: <SourceLink file="common/config.go" /> |
+| `database.logFilters.uriEnv` | `string` | required | Name of the environment variable containing the MongoDB URI. The URI is not placed in config output. |
+| `database.logFilters.database` | `string` | required | MongoDB database. |
+| `database.logFilters.collection` | `string` | `erpc_log_filters` | Collection name. Source: <SourceLink file="common/defaults.go" /> |
+| `database.logFilters.ttl` | `Duration` | `24h` | Time since the last completed call before expiry; minimum `1m`. Source: <SourceLink file="common/defaults.go" /> |
+| `projects[].networks[].evm.sharedLogFilters` | `bool` | `false` | Enable only for the selected EVM network. Requires `database.logFilters`. |
+
+### Edge cases & gotchas
+
+1. Existing native filter IDs from before cutover remain on the old path. Restart clients to create managed IDs before relying on cross-pod affinity.
+2. A MongoDB outage or a concurrently leased filter returns an error. eRPC never falls back to pod-local state for a managed ID.
+3. A pod crash after acquiring a consuming poll leaves the record uncertain. Later polls fail explicitly because the upstream may have consumed a batch. An application with a durable L1 block cursor can backfill with `eth_getLogs` and recreate the filter.
+4. A lost response after eRPC releases the record cannot be detected by the standard filter API. Clients needing a no-gap guarantee require durable client-side scanning or an acknowledgment/cursor extension.
+5. Native provider IDs might not work across the provider's internal HTTP backends. Probe this before rollout; this registry guarantees the upstream ID, not provider-internal stickiness.
+6. `eth_newBlockFilter` and `eth_newPendingTransactionFilter` remain native. Their change results cannot be reconstructed from `eth_getLogs`.
+
+### Observability
+
+At INFO, creation and successful calls log a hash of the public ID, upstream ID, and call generation. Credentials and native filter IDs are omitted. Existing upstream request metrics still record the method and upstream. A store error appears in the JSON-RPC failure path and must be monitored during canary rollout.
+
+</AISection>

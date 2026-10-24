@@ -41,3 +41,16 @@ func TestIsMissingDataError(t *testing.T) {
 		})
 	}
 }
+
+func TestIsStatefulFilterMethod(t *testing.T) {
+	for _, method := range []string{"eth_newFilter", "ETH_GETFILTERCHANGES", "eth_getFilterLogs", "eth_uninstallFilter"} {
+		if !IsStatefulFilterMethod(method) {
+			t.Errorf("%s must be handled as a native filter call", method)
+		}
+	}
+	for _, method := range []string{"eth_getLogs", "eth_call", "eth_newBlockFilter", "unknown_method"} {
+		if IsStatefulFilterMethod(method) {
+			t.Errorf("%s must keep ordinary routing", method)
+		}
+	}
+}

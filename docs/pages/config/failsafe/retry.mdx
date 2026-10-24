@@ -15,14 +15,15 @@ import {
 
 # Retry
 
-A single bad response no longer reaches your users. eRPC retries at two levels: rotate
+A single bad response need not reach your users. eRPC retries at two levels: rotate
 to a fresh upstream when a provider fails, and re-hit the same upstream for brief
 connectivity blips. For "block not yet available" conditions it paces retries to the
-chain's own block time instead of hammering upstreams pointlessly.
+chain's own block time instead of hammering upstreams pointlessly. Native filter calls
+make one attempt because a timed-out poll may already have consumed logs.
 
 **What you get**
 
-- Automatic failover across providers on any retryable error
+- Automatic failover across providers on retryable stateless calls
 - Block-time-aware pacing for missing data — no hammering while waiting for the next block
 - A separate cap for "data not ready yet" retries so they can't crowd out hard-error failover
 - Per-method tuning via `matchMethod` — aggressive failover for reads, conservative for writes
@@ -468,6 +469,7 @@ is cold:
 19. **`IsRetryableTowardNetwork` uses explicit iteration over multi-error wrappers.** The function handles `errors.Join`-style wrappers by iterating children explicitly — if ANY child is retryable, the bundle is retryable. If the wrapper doesn't implement `Unwrap() []error`, the code falls through to single-cause chain walk (only first child is seen). Source: <SourceLink file="common/errors.go" lines="2400-2410" />
 20. **`IsRetryableTowardsUpstream` blocklist.** The following error codes are never retried at upstream scope: `ErrCodeFailsafeCircuitBreakerOpen`, `ErrCodeUpstreamRequestSkipped`, `ErrCodeUpstreamMethodIgnored`, `ErrCodeEndpointUnsupported`, `ErrCodeEndpointBillingIssue`, `ErrCodeJsonRpcRequestUnmarshal`, `ErrCodeEndpointExecutionException`, `ErrCodeEndpointUnauthorized`, `ErrCodeEndpointRequestTooLarge`, `ErrCodeEndpointContentValidation`. Any `IsCapacityIssue` error (rate-limits) is also blocked. Source: <SourceLink file="common/errors.go" lines="2455-2497" />
 21. **`IsRetryableTowardNetwork` full classification by error type.** `ErrUpstreamsExhausted` with no cause → false; wrapping all `ErrEndpointExecutionException` → false; wrapping any `ErrEndpointMissingData`, `ErrEndpointServerSideException`, or mixed timeout+missing-data → true. Standalone `ErrEndpointClientSideException` (-32600) → true (no `retryableTowardNetwork: false` flag). Confirmed by `common/errors_retry_test.go`. Source: <SourceLink file="common/errors.go" lines="2379-2436" />
+22. **Native log-filter calls make one upstream attempt.** `eth_newFilter`, `eth_getFilterChanges`, `eth_getFilterLogs`, and `eth_uninstallFilter` bypass network retry/hedge/consensus, upstream retry/hedge, and fallback escape. A timed-out poll may already have consumed logs, so the error is returned to the client. The optional [shared log-filter registry](/config/database/log-filters) binds new log filters to their creation upstream across pods; legacy native IDs remain unbound. Confirmed by `TestNetworkExecutorNativeFilterDoesNotRetryOrHedge` and `TestUpstreamExecutorNativePollDoesNotRetryOrHedge`. Source: <SourceLink file="architecture/evm/util.go" />, <SourceLink file="erpc/networks.go" />.
 
 ### Observability
 

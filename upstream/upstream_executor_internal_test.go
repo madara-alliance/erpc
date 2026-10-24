@@ -3,6 +3,7 @@ package upstream
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -41,4 +42,22 @@ func TestUpstreamExecutor_InternalRequestsSkipBreaker(t *testing.T) {
 
 	require.Equal(t, failsafe.StateClosed, run(true))
 	require.Equal(t, failsafe.StateOpen, run(false))
+}
+
+func TestUpstreamExecutorNativePollDoesNotRetryOrHedge(t *testing.T) {
+	lg := zerolog.Nop()
+	ex, err := NewUpstreamExecutor(&common.UpstreamFailsafeConfig{
+		Retry: &common.RetryPolicyConfig{MaxAttempts: 3},
+		Hedge: &common.HedgePolicyConfig{MaxCount: 2},
+	}, &lg)
+	require.NoError(t, err)
+	req := common.NewNormalizedRequest([]byte(`{"jsonrpc":"2.0","id":1,"method":"eth_getFilterChanges","params":["0x1"]}`))
+	uncertain := errors.New("response lost")
+	var calls atomic.Int32
+	_, got := ex.Run(context.Background(), req, func(context.Context, bool) (*common.NormalizedResponse, error) {
+		calls.Add(1)
+		return nil, uncertain
+	})
+	require.ErrorIs(t, got, uncertain)
+	require.Equal(t, int32(1), calls.Load())
 }

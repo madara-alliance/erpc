@@ -1023,6 +1023,14 @@ func (c *SharedStateConfig) SetDefaults(defClusterKey string) error {
 }
 
 func (d *DatabaseConfig) SetDefaults(defClusterKey string) error {
+	if d.LogFilters != nil {
+		if d.LogFilters.Collection == "" {
+			d.LogFilters.Collection = "erpc_log_filters"
+		}
+		if d.LogFilters.TTL == 0 {
+			d.LogFilters.TTL = Duration(24 * time.Hour)
+		}
+	}
 	if d.EvmJsonRpcCache != nil {
 		if err := d.EvmJsonRpcCache.SetDefaults(); err != nil {
 			return err

@@ -421,6 +421,17 @@ export interface DatabaseConfig {
   evmJsonRpcCache?: CacheConfig;
   svmJsonRpcCache?: CacheConfig;
   sharedState?: SharedStateConfig;
+  logFilters?: MongoLogFilterConfig;
+}
+/**
+ * MongoLogFilterConfig enables a shared registry for native EVM log filters.
+ * The URI is read from an environment variable so config dumps contain no credentials.
+ */
+export interface MongoLogFilterConfig {
+  uriEnv: string;
+  database: string;
+  collection?: string;
+  ttl?: Duration;
 }
 export interface SharedStateConfig {
   /**
@@ -1693,6 +1704,7 @@ export interface SvmAvailabilityBoundConfig {
 }
 export interface EvmNetworkConfig {
   chainId: number /* int64 */;
+  sharedLogFilters?: boolean;
   fallbackFinalityDepth?: number /* int64 */;
   fallbackStatePollerDebounce?: Duration;
   integrity?: EvmIntegrityConfig;

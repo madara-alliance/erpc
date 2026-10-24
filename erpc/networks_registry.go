@@ -321,6 +321,12 @@ func (nr *NetworksRegistry) prepareNetwork(nwCfg *common.NetworkConfig) (*Networ
 	if err != nil {
 		return nil, err
 	}
+	if nwCfg.Evm != nil && nwCfg.Evm.SharedLogFilters {
+		if nr.project.logFilterStore == nil {
+			return nil, fmt.Errorf("shared log filters enabled without a filter store")
+		}
+		network.logFilterStore = nr.project.logFilterStore
+	}
 
 	handler, err := common.GetArchitectureHandler(nwCfg.Architecture)
 	if err != nil {

@@ -23,6 +23,18 @@ func IsNonRetryableWriteMethod(method string) bool {
 	}
 }
 
+// IsStatefulFilterMethod identifies native filter calls that must not be
+// replayed or redirected without shared filter state. A poll can consume logs
+// even when its response is lost, and a filter ID belongs to one upstream.
+func IsStatefulFilterMethod(method string) bool {
+	switch strings.ToLower(method) {
+	case "eth_newfilter", "eth_getfilterchanges", "eth_getfilterlogs", "eth_uninstallfilter":
+		return true
+	default:
+		return false
+	}
+}
+
 func IsMissingDataError(err error) bool {
 	txt := err.Error()
 	return strings.Contains(txt, "missing trie node") ||

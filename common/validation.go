@@ -318,6 +318,14 @@ func (p *ProxyPoolConfig) Validate() error {
 }
 
 func (d *DatabaseConfig) Validate() error {
+	if d.LogFilters != nil {
+		if d.LogFilters.URIEnv == "" || d.LogFilters.Database == "" || d.LogFilters.Collection == "" {
+			return fmt.Errorf("database.logFilters requires uriEnv, database, and collection")
+		}
+		if d.LogFilters.TTL.Duration() < time.Minute {
+			return fmt.Errorf("database.logFilters.ttl must be at least 1m")
+		}
+	}
 	if d.EvmJsonRpcCache != nil {
 		if err := d.EvmJsonRpcCache.Validate(); err != nil {
 			return err
@@ -1585,6 +1593,9 @@ func (n *NetworkConfig) Validate(c *Config) error {
 		return fmt.Errorf("network.*.svm is required for svm networks")
 	}
 	if n.Evm != nil {
+		if n.Evm.SharedLogFilters && (c.Database == nil || c.Database.LogFilters == nil) {
+			return fmt.Errorf("network.*.evm.sharedLogFilters requires database.logFilters")
+		}
 		if err := n.Evm.Validate(); err != nil {
 			return err
 		}

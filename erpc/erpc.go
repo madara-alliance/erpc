@@ -2,6 +2,8 @@ package erpc
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"time"
 
 	"github.com/erpc/erpc/architecture/evm"
@@ -42,12 +44,10 @@ func NewERPC(
 	if err != nil {
 		return nil, err
 	}
-
 	proxyPoolRegistry, err := clients.NewProxyPoolRegistry(cfg.ProxyPools, logger)
 	if err != nil {
 		return nil, err
 	}
-
 	if sharedState == nil {
 		cfg := &common.SharedStateConfig{
 			Connector: &common.ConnectorConfig{
@@ -81,6 +81,27 @@ func NewERPC(
 	)
 	if err != nil {
 		return nil, err
+	}
+	if cfg.Database != nil && cfg.Database.LogFilters != nil {
+		storeCfg := cfg.Database.LogFilters
+		uri := os.Getenv(storeCfg.URIEnv)
+		if uri == "" {
+			return nil, fmt.Errorf("log filter MongoDB URI environment variable %q is empty", storeCfg.URIEnv)
+		}
+		store, err := data.NewMongoLogFilterStore(appCtx, uri, storeCfg.Database, storeCfg.Collection, storeCfg.TTL.Duration())
+		if err != nil {
+			return nil, err
+		}
+		projectRegistry.logFilterStore = store
+		for _, project := range projectRegistry.preparedProjects {
+			project.logFilterStore = store
+		}
+		go func() {
+			<-appCtx.Done()
+			closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = store.Close(closeCtx)
+		}()
 	}
 
 	var adminAuthRegistry *auth.AuthRegistry

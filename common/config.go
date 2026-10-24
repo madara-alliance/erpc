@@ -317,9 +317,19 @@ type AliasingRuleConfig struct {
 }
 
 type DatabaseConfig struct {
-	EvmJsonRpcCache *CacheConfig       `yaml:"evmJsonRpcCache,omitempty" json:"evmJsonRpcCache"`
-	SvmJsonRpcCache *CacheConfig       `yaml:"svmJsonRpcCache,omitempty" json:"svmJsonRpcCache"`
-	SharedState     *SharedStateConfig `yaml:"sharedState,omitempty" json:"sharedState"`
+	EvmJsonRpcCache *CacheConfig          `yaml:"evmJsonRpcCache,omitempty" json:"evmJsonRpcCache"`
+	SvmJsonRpcCache *CacheConfig          `yaml:"svmJsonRpcCache,omitempty" json:"svmJsonRpcCache"`
+	SharedState     *SharedStateConfig    `yaml:"sharedState,omitempty" json:"sharedState"`
+	LogFilters      *MongoLogFilterConfig `yaml:"logFilters,omitempty" json:"logFilters,omitempty"`
+}
+
+// MongoLogFilterConfig enables a shared registry for native EVM log filters.
+// The URI is read from an environment variable so config dumps contain no credentials.
+type MongoLogFilterConfig struct {
+	URIEnv     string   `yaml:"uriEnv" json:"uriEnv"`
+	Database   string   `yaml:"database" json:"database"`
+	Collection string   `yaml:"collection,omitempty" json:"collection,omitempty"`
+	TTL        Duration `yaml:"ttl,omitempty" json:"ttl" tstype:"Duration"`
 }
 
 type SharedStateConfig struct {
@@ -2731,6 +2741,7 @@ func (s *SvmUpstreamConfig) Copy() *SvmUpstreamConfig {
 
 type EvmNetworkConfig struct {
 	ChainId                     int64               `yaml:"chainId" json:"chainId"`
+	SharedLogFilters            bool                `yaml:"sharedLogFilters,omitempty" json:"sharedLogFilters,omitempty"`
 	FallbackFinalityDepth       int64               `yaml:"fallbackFinalityDepth,omitempty" json:"fallbackFinalityDepth"`
 	FallbackStatePollerDebounce Duration            `yaml:"fallbackStatePollerDebounce,omitempty" json:"fallbackStatePollerDebounce" tstype:"Duration"`
 	Integrity                   *EvmIntegrityConfig `yaml:"integrity,omitempty" json:"integrity"`
